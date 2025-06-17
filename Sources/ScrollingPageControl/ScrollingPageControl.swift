@@ -19,18 +19,7 @@ open class ScrollingPageControl: UIView {
             createViews()
         }
     }
-    open var currentPageOffset:CGFloat = 0
-    
-    open func calcluatePageOffset () {
-        let centerDots = min(self.centerDots, pages)
-        let maxDots = min(self.maxDots, pages)
-        let sidePages = (maxDots - centerDots) / 2
-        let horizontalOffset = CGFloat(-pageOffset + sidePages) * (dotSize + spacing) + (bounds.width - intrinsicContentSize.width) / 2
-        
-        self.currentPageOffset = horizontalOffset
-    }
-    
-    //    The number of dots
+
     open var pages: Int = 0 {
         didSet {
             guard pages != oldValue else { return }
@@ -44,53 +33,39 @@ open class ScrollingPageControl: UIView {
             delegate?.viewForDot(at: index) ?? CircularView(frame: CGRect(origin: .zero, size: CGSize(width: dotSize, height: dotSize)))
         }
     }
-    //    The index of the currently selected page
     open var selectedPage: Int = 0 {
         didSet {
-            guard selectedPage != oldValue else {
-                if oldValue == 0 {
-                    centerOffset = selectedPage - pageOffset
-                    pageOffset = selectedPage - centerOffset
-                    calcluatePageOffset()
-                }
-                return }
+            guard selectedPage != oldValue else { return }
             selectedPage = max(0, min (selectedPage, pages - 1))
             updateColors()
             if (0..<centerDots).contains(selectedPage - pageOffset) {
                 centerOffset = selectedPage - pageOffset
             } else {
                 pageOffset = selectedPage - centerOffset
-                calcluatePageOffset()
             }
         }
     }
-    //    The maximum number of dots that will show in the control
     open var maxDots = 7 {
         didSet {
             maxDots = max(3, maxDots)
             if maxDots % 2 == 0 {
                 maxDots += 1
-                print("maxDots has to be an odd number")
+                print("maxPages has to be an odd number")
             }
             invalidateIntrinsicContentSize()
+            updatePositions()
         }
     }
-    //    The number of dots that will be centered and full-sized
     open var centerDots = 3 {
         didSet {
             centerDots = max(1, centerDots)
-            if centerDots > maxDots {
-                centerDots = maxDots
-                print("centerDots has to be equal or smaller than maxDots")
-            }
             if centerDots % 2 == 0 {
                 centerDots += 1
                 print("centerDots has to be an odd number")
             }
-            invalidateIntrinsicContentSize()
+            updatePositions()
         }
     }
-    //    The duration, in seconds, of the dot slide animation
     open var slideDuration: TimeInterval = 0.15
     private var centerOffset = 0
     private var pageOffset = 0 {
@@ -98,51 +73,54 @@ open class ScrollingPageControl: UIView {
             UIView.animate(withDuration: slideDuration, delay: 0.15, options: [], animations: self.updatePositions, completion: nil)
         }
     }
-    
-    internal var dotViews: [UIView] = [] {
+
+    private var dotViews: [UIView] = [] {
         didSet {
             oldValue.forEach { $0.removeFromSuperview() }
             dotViews.forEach(addSubview)
             updateColors()
-            setNeedsLayout()
+            updatePositions()
         }
     }
-    
-    //    The color of all the unselected dots
+
     open var dotColor = UIColor.lightGray { didSet { updateColors() } }
-    //    The color of the currently selected dot
     open var selectedColor = #colorLiteral(red: 0.2392156869, green: 0.6745098233, blue: 0.9686274529, alpha: 1) { didSet { updateColors() } }
-    
-    //    The size of the dots
     open var dotSize: CGFloat = 6 {
         didSet {
             dotSize = max(1, dotSize)
             dotViews.forEach { $0.frame = CGRect(origin: .zero, size: CGSize(width: dotSize, height: dotSize)) }
-            invalidateIntrinsicContentSize()
+            updatePositions()
         }
     }
-    //    The space between dots
+
+    open var selectedDotSize: CGFloat = 10 {
+        didSet {
+            selectedDotSize = max(1, selectedDotSize)
+            updatePositions()
+        }
+    }
+
     open var spacing: CGFloat = 4 {
         didSet {
             spacing = max(1, spacing)
-            invalidateIntrinsicContentSize()
+            updatePositions()
         }
     }
-    
+
     public init() {
         super.init(frame: .zero)
         isOpaque = false
     }
-    
+
     public required init?(coder aDecoder: NSCoder) {
         super.init(coder: aDecoder)
     }
-    
+
     public override init(frame: CGRect) {
         super.init(frame: frame)
         isOpaque = false
     }
-    
+
     private var lastSize = CGSize.zero
     open override func layoutSubviews() {
         super.layoutSubviews()
@@ -150,40 +128,46 @@ open class ScrollingPageControl: UIView {
         lastSize = bounds.size
         updatePositions()
     }
-    
+
     private func updateColors() {
         dotViews.enumerated().forEach { page, dot in
             dot.tintColor = page == selectedPage ? selectedColor : dotColor
         }
     }
-    
-    internal func updatePositions() {
-        let centerDots = min(self.centerDots, pages)
-        let maxDots = min(self.maxDots, pages)
+
+    private func updatePositions() {
         let sidePages = (maxDots - centerDots) / 2
-        let horizontalOffset = CGFloat(-pageOffset + sidePages) * (dotSize + spacing) + (bounds.width - intrinsicContentSize.width) / 2
         let centerPage = centerDots / 2 + pageOffset
-        dotViews.enumerated().forEach { page, dot in
-            let center = CGPoint(x: horizontalOffset + bounds.minX + dotSize / 2 + (dotSize + spacing) * CGFloat(page), y: bounds.midY)
-            let scale: CGFloat = {
-                let distance = abs(page - centerPage)
-                if pages > maxDots {
-                    if distance >= (maxDots / 2) { return 0.44 }
-                    return [1, 0.66, 0.44, 0.44][max(0, min(3, distance - centerDots / 2))]
-                } else {
-                    return 1.0
-                }
-                
-            }()
-            dot.frame = CGRect(origin: .zero, size: CGSize(width: dotSize * scale, height: dotSize * scale))
-            dot.center = center
+        let dotScales: [CGFloat] = (0..<dotViews.count).map { page in
+            let distance = abs(page - centerPage)
+            if distance > (maxDots / 2) { return 0 }
+            let index = max(0, min(3, distance - centerDots / 2))
+            return [1, 0.66, 0.33, 0.16][index]
+        }
+        let dotWidths: [CGFloat] = dotScales.enumerated().map { (i, scale) in
+            let base = i == selectedPage ? selectedDotSize : dotSize
+            return base * scale
+        }
+        let totalWidth = dotWidths.reduce(0, +) + spacing * CGFloat(dotWidths.count - 1)
+        let horizontalOffset = (bounds.width - totalWidth) / 2
+
+        var x: CGFloat = horizontalOffset
+        dotViews.enumerated().forEach { index, dot in
+            let scale = dotScales[index]
+            let width = dotWidths[index]
+            let height = dotSize * scale
+            dot.frame = CGRect(origin: .zero, size: CGSize(width: width, height: height))
+            dot.center = CGPoint(x: x + width / 2, y: bounds.midY)
+            x += width + spacing
         }
     }
-    
+
     open override var intrinsicContentSize: CGSize {
-        let pages = min(maxDots, self.pages)
-        let width = CGFloat(pages) * dotSize + CGFloat(pages - 1) * spacing
-        let height = dotSize
-        return CGSize(width: width, height: height)
+        let visiblePages = min(maxDots, pages)
+        let totalSpacing = CGFloat(visiblePages - 1) * spacing
+        let totalDots = (0..<visiblePages).map { index -> CGFloat in
+            index == selectedPage ? selectedDotSize : dotSize
+        }.reduce(0, +)
+        return CGSize(width: totalDots + totalSpacing, height: dotSize)
     }
 }
