@@ -67,6 +67,9 @@ open class ScrollingPageControl: UIView {
         }
     }
 
+    open var dotsScale: [CGFloat] = [1, 0.66, 0.33, 0.16]
+    open var hiddenDotScale: CGFloat = .zero
+    
     open var slideDuration: TimeInterval = 0.15
     open var dotColor = UIColor.lightGray { didSet { updateColors() } }
     open var selectedColor = UIColor.systemBlue { didSet { updateColors() } }
@@ -157,9 +160,9 @@ open class ScrollingPageControl: UIView {
         let centerPage = centerDots / 2 + pageOffset
         let dotScales: [CGFloat] = (0..<dotViews.count).map { page in
             let distance = abs(page - centerPage)
-            if distance > (maxDots / 2) { return 0 }
+            if distance > (maxDots / 2) { return hiddenDotScale }
             let index = max(0, min(3, distance - centerDots / 2))
-            return [1, 0.66, 0.33, 0.16][index]
+            return dotsScale[index]
         }
         let dotWidths: [CGFloat] = dotScales.enumerated().map { (i, scale) in
             let base = i == selectedPage ? selectedDotSize : dotSize
